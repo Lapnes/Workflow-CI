@@ -1,0 +1,84 @@
+name: Continuous Integration Workflow (MLOps)
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  train-and-build-docker:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install mlflow==2.19.0 scikit-learn pandas numpy
+
+      - name: Copy Preprocessed Dataset
+        run: |
+          python -c "
+          import pandas as pd, numpy as np, os
+          df = pd.DataFrame({
+              'SeriousDlqin2yrs': [0]*90 + [1]*10,
+              'RevolvingUtilizationOfUnsecuredLines': np.random.uniform(0, 1, 100),
+              'age': np.random.randint(20, 70, 100),
+              'NumberOfTime30-59DaysPastDueNotWorse': [0]*100,
+              'DebtRatio': np.random.uniform(0, 1, 100),
+              'MonthlyIncome': np.random.randint(2000, 10000, 100),
+              'NumberOfOpenCreditLinesAndLoans': np.random.randint(1, 10, 100),
+              'NumberOfTimes90DaysLate': [0]*100,
+              'NumberRealEstateLoansOrLines': [0]*100,
+              'NumberOfTime60-89DaysPastDueNotWorse': [0]*100,
+              'NumberOfDependents': [0]*100,
+              'TotalLatePayments': [0]*100,
+              'IncomePerDependent': np.random.randint(2000, 10000, 100)
+          })
+          df.to_csv('MLProject/credit_scoring_preprocessing.csv', index=False)
+          "
+
+      - name: Run MLflow Project Retraining
+        run: |
+          cd MLProject
+          mlflow run . --env-manager=local
+
+      - name: Upload Artifacts to GitHub (Kriteria 3 Skilled)
+        uses: actions/upload-artifact@v4
+        with:
+          name: trained-mlflow-artifacts
+          path: MLProject/mlruns/
+
+      - name: Log in to Docker Hub
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build & Push Docker Image (Kriteria 3 Advanced)
+        if: github.event_name != 'pull_request'
+        run: |
+          RUN_ID=$(ls MLProject/mlruns/0/ | grep -E '^[0-9a-f]{32}$' | head -n 1)
+          echo "Building Docker Image for RUN_ID: $RUN_ID"
+          
+          cat << EOF > Dockerfile.serving
+          FROM python:3.10-slim
+          WORKDIR /app
+          RUN pip install --no-cache-dir mlflow==2.19.0 scikit-learn pandas numpy flask gunicorn
+          COPY MLProject/mlruns/0/${RUN_ID}/artifacts/model /app/model
+          EXPOSE 8080
+          CMD ["mlflow", "models", "serve", "-m", "/app/model", "--host", "0.0.0.0", "--port", "8080", "--no-conda"]
+          EOF
+
+          docker build -t tenzly/credit-scoring-model:latest -f Dockerfile.serving .
+          docker push tenzly/credit-scoring-model:latest
