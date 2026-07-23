@@ -25,26 +25,31 @@ jobs:
           python -m pip install --upgrade pip
           pip install mlflow==2.19.0 scikit-learn pandas numpy
 
-      - name: Copy Preprocessed Dataset
+      - name: Ensure Preprocessed Dataset Exists
         run: |
           python -c "
-          import pandas as pd, numpy as np, os
-          df = pd.DataFrame({
-              'SeriousDlqin2yrs': [0]*90 + [1]*10,
-              'RevolvingUtilizationOfUnsecuredLines': np.random.uniform(0, 1, 100),
-              'age': np.random.randint(20, 70, 100),
-              'NumberOfTime30-59DaysPastDueNotWorse': [0]*100,
-              'DebtRatio': np.random.uniform(0, 1, 100),
-              'MonthlyIncome': np.random.randint(2000, 10000, 100),
-              'NumberOfOpenCreditLinesAndLoans': np.random.randint(1, 10, 100),
-              'NumberOfTimes90DaysLate': [0]*100,
-              'NumberRealEstateLoansOrLines': [0]*100,
-              'NumberOfTime60-89DaysPastDueNotWorse': [0]*100,
-              'NumberOfDependents': [0]*100,
-              'TotalLatePayments': [0]*100,
-              'IncomePerDependent': np.random.randint(2000, 10000, 100)
-          })
-          df.to_csv('MLProject/credit_scoring_preprocessing.csv', index=False)
+          import os, pandas as pd, numpy as np
+          path = 'MLProject/credit_scoring_preprocessing.csv'
+          if not os.path.exists(path):
+              df = pd.DataFrame({
+                  'SeriousDlqin2yrs': [0]*90 + [1]*10,
+                  'RevolvingUtilizationOfUnsecuredLines': np.random.uniform(0, 1, 100),
+                  'age': np.random.randint(20, 70, 100),
+                  'NumberOfTime30-59DaysPastDueNotWorse': [0]*100,
+                  'DebtRatio': np.random.uniform(0, 1, 100),
+                  'MonthlyIncome': np.random.randint(2000, 10000, 100),
+                  'NumberOfOpenCreditLinesAndLoans': np.random.randint(1, 10, 100),
+                  'NumberOfTimes90DaysLate': [0]*100,
+                  'NumberRealEstateLoansOrLines': [0]*100,
+                  'NumberOfTime60-89DaysPastDueNotWorse': [0]*100,
+                  'NumberOfDependents': [0]*100,
+                  'TotalLatePayments': [0]*100,
+                  'IncomePerDependent': np.random.randint(2000, 10000, 100)
+              })
+              df.to_csv(path, index=False)
+              print('Dataset fallback created.')
+          else:
+              print('Dataset preprocessed exists!')
           "
 
       - name: Run MLflow Project Retraining
